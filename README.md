@@ -33,7 +33,7 @@ worrying about swapping occurring.
 
 ### SYNOPSIS
 
-oomstaller [<options>] command [arg] ...
+`oomstaller [<options>] command [arg] ...`
 
 
 ### DESCRIPTION
