@@ -50,17 +50,19 @@ oomstaller make -j `nproc`
 ```
 
 
---thres <percentage>                     default:  50.0
+### OPTIONS
+
+`--thres <percentage>`                     default:  50.0
 
 This tool suspends processes so that memory usage by running processes
 does not exceed the specified percentage of available memory.
 
---period <seconds>                       default:   1.0
+`--period <seconds>`                       default:   1.0
 
 Specifies the interval at which memory usage of each process is checked
 and processes are controlled.
 
---slash <minimum available memory (MB)>  default: 250.0
+`--slash <minimum available memory (MB)>`  default: 250.0
 
 If the amount of available memory falls below the specified value, it is
 assumed that swap slashing is occurring.
