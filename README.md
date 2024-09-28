@@ -42,6 +42,14 @@ This program monitors the memory usage of each process when performing a
 build, and suspends processes as necessary to prevent swapping from
 occurring.
 
+To perform a build using this tool, specify make or ninja as the
+argument of this tool and execute as follows.
+
+```
+oomstaller make -j `nproc`
+```
+
+
 --thres <percentage>                     default:  50.0
 
 This tool suspends processes so that memory usage by running processes
