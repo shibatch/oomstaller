@@ -135,7 +135,8 @@ void loop(shared_ptr<thread> childTh) {
     {
       auto m = getProcesses();
       for(auto e : m) {
-	if ((e.second.state != 'R' && e.second.state != 'T') || !isTarget(m, &e.second)) continue;
+	if ((e.second.state != 'R' && e.second.state != 'T' && e.second.state != 'D') ||
+	    !isTarget(m, &e.second)) continue;
 	usedMem += e.second.rss;
 	proc.insert(e.second);
 	if (pidLargestRSS == 0 || e.second.rss > m.at(pidLargestRSS).rss) {
