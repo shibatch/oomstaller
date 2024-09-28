@@ -152,14 +152,13 @@ void loop(shared_ptr<thread> childTh) {
       char nextState = '\0';
       if (e.pid == pidLargestRSS) {
 	nextState = 'R';
-	m -= e.rss;
       } else {
 	if (m >= usableMem * memThres || freeMem < minFreeMem) {
 	  nextState = 'T';
+	  m -= e.rss;
 	} else {
 	  nextState = 'R';
 	}
-	m -= e.rss;
       }
 
       if (nextState == 'R') {
