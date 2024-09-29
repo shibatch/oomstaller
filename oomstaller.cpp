@@ -63,9 +63,10 @@ struct ProcInfo {
 
   ProcInfo(const char *s) {
     vector<char> t(1024);
-    //         1  2      3  4  5  6  7   8   9   10  11  12  13  14  15  16  17  18  19  20  21  22   23  24
-    sscanf(s, "%d %1020s %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu %lu %ld",
-	   &pid, t.data(), &state, &ppid, &pgrp, &session, &starttime, &vsize, &rss);
+    //                 1  2      3  4  5  6  7   8   9   10  11  12  13  14  15  16  17  18  19  20  21  22   23  24
+    int n = sscanf(s, "%d %1020s %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu %lu %ld",
+		   &pid, t.data(), &state, &ppid, &pgrp, &session, &starttime, &vsize, &rss);
+    if (n != 9) throw(runtime_error("/proc/<pid>/stat format error"));
     comm = t.data();
     comm = comm.substr(1, comm.size()-2);
   }
@@ -187,9 +188,9 @@ void execChild(string cmd) {
 void handler(int n) {
   auto m = getProcesses();
   for(auto e : m) {
-    if (!isTarget(m, &e.second)) continue;
-    kill(e.second.pid, n);
+    if (e.second.ppid != pid) continue;
     kill(e.second.pid, SIGCONT);
+    kill(e.second.pid, n);
   }
 
   unique_lock<mutex> lock(mtx);
@@ -232,6 +233,8 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     killall -v -s CONT -u $USER -r '.*'" << endl;
   cerr << endl;
+  cerr << "AUTHOR" << endl;
+  cerr << "     See https://github.com/shibatch/oomstaller" << endl;
 
   exit(-1);
 }
@@ -288,7 +291,12 @@ int main(int argc, char **argv) {
 
   auto childTh = make_shared<thread>(execChild, cmd);
 
-  loop(childTh);
+  try {
+    loop(childTh);
+  } catch(exception &ex) {
+    cerr << argv[0] << " : " << ex.what() << endl;
+    kill(pid, SIGTERM);
+  }
 
   childTh->join();
 
