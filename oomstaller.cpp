@@ -22,7 +22,7 @@
 
 using namespace std;
 
-double memThres = 0.5, period = 1.0, minFreeMem = 256 * 1024;
+double memThres = 0.75, period = 1.0, minFreeMem = 256 * 1024;
 
 const long pageSize = sysconf(_SC_PAGESIZE);
 const uid_t uid = getuid();
@@ -209,7 +209,7 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << "     build, and suspends processes as necessary to prevent swapping from" << endl;
   cerr << "     occurring." << endl;
   cerr << endl;
-  cerr << "  --thres <percentage>                     default:  50.0" << endl;
+  cerr << "  --thres <percentage>                     default:  75.0" << endl;
   cerr << endl;
   cerr << "     This tool suspends processes so that memory usage by running processes" << endl;
   cerr << "     does not exceed the specified percentage of available memory." << endl;
@@ -268,6 +268,11 @@ int main(int argc, char **argv) {
 
   if (nextArg >= argc) showUsage(argv[0], "");
 
+  signal(SIGINT , handler);
+  signal(SIGTERM, handler);
+  signal(SIGQUIT, handler);
+  signal(SIGHUP , handler);
+
   string cmd = argv[nextArg];
   for(int i=nextArg+1;i<argc;i++) {
     string in = argv[i], out = "'";
@@ -282,11 +287,6 @@ int main(int argc, char **argv) {
   }
 
   auto childTh = make_shared<thread>(execChild, cmd);
-
-  signal(SIGINT , handler);
-  signal(SIGTERM, handler);
-  signal(SIGQUIT, handler);
-  signal(SIGHUP , handler);
 
   loop(childTh);
 

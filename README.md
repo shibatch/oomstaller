@@ -52,7 +52,7 @@ oomstaller make -j `nproc`
 
 ### Options
 
-`--thres <percentage>`                     default:  50.0
+`--thres <percentage>`                     default:  75.0
 
 This tool suspends processes so that memory usage by running processes
 does not exceed the specified percentage of available memory.
@@ -70,11 +70,10 @@ assumed that swap slashing is occurring.
 
 ### Tips
 
-The default value of 50 for the --thres parameter would be a good
-choice when the memory shortage is severe. If the memory shortage is
-not so severe, increasing the value to nearly 100 may result in a
-faster build. Increasing this value too much would increase the time
-where only one process can run due to lack of available memory.
+Lowering the value of --thres results in increased time where some
+cores are not used in order to reduce memory usage. Increasing this
+value too much would increase the time where only one process can run
+due to swap slashing.
 
 We recommend specifying "-j `nproc`" option to ninja. ninja usually runs
 jobs with more threads than CPU cores. This is effective to reduce build
