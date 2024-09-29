@@ -285,6 +285,7 @@ int main(int argc, char **argv) {
 
   signal(SIGINT , handler);
   signal(SIGTERM, handler);
+  signal(SIGQUIT, handler);
   signal(SIGHUP , handler);
 
   loop(childTh);
