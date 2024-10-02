@@ -22,6 +22,35 @@ occurring. This allows you to build using all CPU cores without
 worrying about swapping occurring.
 
 
+#### How it works
+
+Thrashing is a situation in which a CPU takes longer to perform
+swapping due to low memory than the process that the CPU would
+normally perform if there were sufficient memory. When thrashing is
+occurring, in most cases, it takes longer to respond to user input
+because the memory for not only the process taking up the most memory
+but also the memory for other processes is swapped out. In addition,
+the OS kills the process that is occupying the largest amount of
+memory, which can make the system unstable.
+
+When thrashing occurs while multiple processes are running in
+parallel, one process may swap out the memory of other running
+processes to reserve the physical memory needed to continue execution.
+However, even after swapping out the memory of a running process, the
+swapped-out memory is soon needed again to continue execution of that
+process, resulting in a state of frequent swap-in/swap-out.
+
+To avoid this situation, this tool suspends part of processes and
+stops their execution completely. This ensures that once the memory
+for a process is swapped out, it will not be swapped in again until
+its execution is resumed, and processes that are still running can
+continue their execution with the necessary physical memory allocated.
+Because the advantage of not having to swap is much greater than the
+disadvantage of some CPU cores not being utilized, this tool can
+reduce the total execution time compared to when thrashing is
+occurring.
+
+
 ### How to build
 
 1. Check out the source code from our GitHub repository :

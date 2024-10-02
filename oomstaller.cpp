@@ -239,7 +239,7 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     See https://github.com/shibatch/oomstaller" << endl;
   cerr << endl;
-  cerr << "oomstaller 0.1" << endl;
+  cerr << "oomstaller 0.1.0" << endl;
   cerr << endl;
 
   exit(-1);
