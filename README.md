@@ -1,4 +1,4 @@
-## oomstaller - A tool for suppressing swap slashing at build time
+## oomstaller - A tool for suppressing swap thrashing at build time
 
 Original distribution site : https://github.com/shibatch/oomstaller
 
@@ -54,18 +54,19 @@ oomstaller make -j `nproc`
 
 `--thres <percentage>`                     default:  75.0
 
-This tool suspends processes so that memory usage by running processes
-does not exceed the specified percentage of available memory.
+This tool suspends processes so that memory usage by running build
+processes does not exceed the specified percentage of available
+memory.
 
 `--period <seconds>`                       default:   1.0
 
 Specifies the interval at which memory usage of each process is checked
 and processes are controlled.
 
-`--slash <minimum available memory (MB)>`  default: 256.0
+`--thrash <minimum available memory (MB)>`  default: 256.0
 
 If the amount of available memory falls below the specified value, it is
-assumed that swap slashing is occurring.
+assumed that swap thrashing is occurring.
 
 
 ### Tips
@@ -73,7 +74,7 @@ assumed that swap slashing is occurring.
 Lowering the value of --thres results in increased time where some
 cores are not used in order to reduce memory usage. Increasing this
 value too much would increase the time where only one process can run
-due to swap slashing.
+due to swap thrashing.
 
 We recommend specifying "-j `nproc`" option to ninja. ninja usually runs
 jobs with more threads than CPU cores. This is effective to reduce build

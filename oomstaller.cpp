@@ -199,8 +199,9 @@ void handler(int n) {
 
 void showUsage(const string& argv0, const string& mes = "") {
   if (mes != "") cerr << mes << endl << endl;
+  cerr << endl;
   cerr << "NAME" << endl;
-  cerr << "     oomstaller - suppress swap slashing" << endl;
+  cerr << "     oomstaller - suppress swap thrashing at build time" << endl;
   cerr << endl;
   cerr << "SYNOPSIS" << endl;
   cerr << "     " << argv0 << " [<options>] command [arg] ..." << endl;
@@ -212,18 +213,18 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "  --thres <percentage>                     default:  75.0" << endl;
   cerr << endl;
-  cerr << "     This tool suspends processes so that memory usage by running processes" << endl;
-  cerr << "     does not exceed the specified percentage of available memory." << endl;
+  cerr << "     This tool suspends processes so that memory usage by running build" << endl;
+  cerr << "     processes does not exceed the specified percentage of available memory." << endl;
   cerr << endl;
   cerr << "  --period <seconds>                       default:   1.0" << endl;
   cerr << endl;
   cerr << "     Specifies the interval at which memory usage of each process is checked" << endl;
   cerr << "     and processes are controlled." << endl;
   cerr << endl;
-  cerr << "  --slash <minimum available memory (MB)>  default: 256.0" << endl;
+  cerr << "  --thrash <minimum available memory (MB)>  default: 256.0" << endl;
   cerr << endl;
   cerr << "     If the amount of available memory falls below the specified value, it is" << endl;
-  cerr << "     assumed that swap slashing is occurring." << endl;
+  cerr << "     assumed that swap thrashing is occurring." << endl;
   cerr << endl;
   cerr << "TIPS" << endl;
   cerr << "     If you kill this tool with SIGKILL, a large number of build processes" << endl;
@@ -234,7 +235,12 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << "     killall -v -s CONT -u $USER -r '.*'" << endl;
   cerr << endl;
   cerr << "AUTHOR" << endl;
+  cerr << "     Written by Naoki Shibata." << endl;
+  cerr << endl;
   cerr << "     See https://github.com/shibatch/oomstaller" << endl;
+  cerr << endl;
+  cerr << "oomstaller 0.1" << endl;
+  cerr << endl;
 
   exit(-1);
 }
@@ -256,11 +262,11 @@ int main(int argc, char **argv) {
       period = strtod(argv[nextArg+1], &p);
       if (p == argv[nextArg+1]) showUsage(argv[0], "A real value is expected after --period.");
       nextArg++;
-    } else if (string(argv[nextArg]) == "--slash") {
+    } else if (string(argv[nextArg]) == "--thrash") {
       if (nextArg+1 >= argc) showUsage(argv[0]);
       char *p;
       minFreeMem = strtod(argv[nextArg+1], &p) * 1024;
-      if (p == argv[nextArg+1]) showUsage(argv[0], "A real value is expected after --slash.");
+      if (p == argv[nextArg+1]) showUsage(argv[0], "A real value is expected after --thrash.");
       nextArg++;
     } else if (string(argv[nextArg]).substr(0, 2) == "--") {
       showUsage(argv[0], string("Unrecognized option : ") + argv[nextArg]);
