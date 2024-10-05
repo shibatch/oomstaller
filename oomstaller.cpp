@@ -189,8 +189,8 @@ void handler(int n) {
   auto m = getProcesses();
   for(auto e : m) {
     if (e.second.ppid != pid) continue;
-    kill(e.second.pid, SIGCONT);
-    kill(e.second.pid, n);
+    kill(-e.second.pgrp, SIGCONT);
+    kill(-e.second.pgrp, n);
   }
 
   unique_lock<mutex> lock(mtx);
@@ -239,7 +239,7 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     See https://github.com/shibatch/oomstaller" << endl;
   cerr << endl;
-  cerr << "oomstaller 0.1.0" << endl;
+  cerr << "oomstaller 0.1.1" << endl;
   cerr << endl;
 
   exit(-1);
