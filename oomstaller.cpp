@@ -25,7 +25,7 @@ using namespace std;
 double memThres = 0.75, period = 1.0, minFreeMem = 256 * 1024;
 
 const long pageSize = sysconf(_SC_PAGESIZE);
-const uid_t uid = getuid();
+uid_t uid = getuid();
 const pid_t pid = getpid();
 
 unordered_map<string, uint64_t> readMeminfo() {
@@ -226,6 +226,11 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << "     If the amount of available memory falls below the specified value, it is" << endl;
   cerr << "     assumed that swap thrashing is occurring." << endl;
   cerr << endl;
+  cerr << "  --uid <uid>  default: the UID of the process" << endl;
+  cerr << endl;
+  cerr << "     When oomstaller is executed inside a fakeroot environment, the real UID" << endl;
+  cerr << "     has to be provided to work correctly." << endl;
+  cerr << endl;
   cerr << "TIPS" << endl;
   cerr << "     If you kill this tool with SIGKILL, a large number of build processes" << endl;
   cerr << "     will remain suspended with SIGSTOP. To prevent this from happening," << endl;
@@ -239,7 +244,7 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     See https://github.com/shibatch/oomstaller" << endl;
   cerr << endl;
-  cerr << "oomstaller 0.1.1" << endl;
+  cerr << "oomstaller 0.2.0" << endl;
   cerr << endl;
 
   exit(-1);
@@ -267,6 +272,12 @@ int main(int argc, char **argv) {
       char *p;
       minFreeMem = strtod(argv[nextArg+1], &p) * 1024;
       if (p == argv[nextArg+1]) showUsage(argv[0], "A real value is expected after --thrash.");
+      nextArg++;
+    } else if (string(argv[nextArg]) == "--uid") {
+      if (nextArg+1 >= argc) showUsage(argv[0]);
+      char *p;
+      uid = strtol(argv[nextArg+1], &p, 0);
+      if (p == argv[nextArg+1]) showUsage(argv[0], "An integer is expected after --uid.");
       nextArg++;
     } else if (string(argv[nextArg]).substr(0, 2) == "--") {
       showUsage(argv[0], string("Unrecognized option : ") + argv[nextArg]);
