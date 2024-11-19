@@ -51,6 +51,22 @@ than the disadvantage of some CPU cores not being utilized, this tool
 can reduce the total execution time compared to when thrashing is
 occurring.
 
+When selecting which processes to suspend and which to execute,
+priority is given first to the execution of the process occupying the
+largest amount of memory. The process occupying the largest amount of
+memory will not be suspended under any circumstances. The remaining
+running processes are selected based on the time when the process
+started running. The later a process is started, the more priority it
+will be given to suspend. This avoids the same process being suspended
+and resumed repeatedly, disrupting the build order, or suspending
+tools that are crucial to the build.
+
+The target processes to be suspended are selected by referencing the
+parent-child relationship of the processes. Only processes that are
+descendants of the command invoked as an argument of oomstaller will
+be suspended, so tools that are not related to the build will not be
+suspended.
+
 
 ### How to build
 
@@ -98,6 +114,11 @@ and processes are controlled.
 If the amount of available memory falls below the specified value, it is
 assumed that swap thrashing is occurring.
 
+`--uid <uid>`                           default: the UID of the process
+
+When oomstaller is executed inside a fakeroot environment, the real
+UID has to be provided to work correctly.
+
 
 ### Tips
 
@@ -106,11 +127,11 @@ cores are not used in order to reduce memory usage. Increasing this
 value too much would increase the time where only one process can run
 due to swap thrashing.
 
-We recommend specifying "-j `nproc`" option to ninja. ninja usually runs
-jobs with more threads than CPU cores. This is effective to reduce build
-time if there is sufficient memory. However, this will only consume extra
-memory in situations where there is not enough memory in which you might
-want to use this tool.
+We recommend specifying "-j \`nproc\`" option to ninja. ninja usually
+runs jobs with more threads than CPU cores. This is effective to
+reduce build time if there is sufficient memory. However, this will
+only consume extra memory in situations where there is not enough
+memory in which you might want to use this tool.
 
 If you kill this tool with SIGKILL, a large number of build processes
 will remain suspended with SIGSTOP. To prevent this from happening,
