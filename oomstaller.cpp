@@ -1,4 +1,4 @@
-// Written by Naoki Shibata  https://github.com/shibatch
+// Written by Naoki Shibata  https://shibatch.github.io
 
 #include <iostream>
 #include <string>
@@ -23,6 +23,7 @@
 using namespace std;
 
 double memThres = 0.75, period = 1.0, minFreeMem = 256 * 1024;
+int maxParallel = 0;
 
 const long pageSize = sysconf(_SC_PAGESIZE);
 uid_t uid = getuid();
@@ -62,13 +63,20 @@ struct ProcInfo {
   ProcInfo() {}
 
   ProcInfo(const char *s) {
-    vector<char> t(1024);
-    //                 1  2      3  4  5  6  7   8   9   10  11  12  13  14  15  16  17  18  19  20  21  22   23  24
-    int n = sscanf(s, "%d %1020s %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu %lu %ld",
-		   &pid, t.data(), &state, &ppid, &pgrp, &session, &starttime, &vsize, &rss);
-    if (n != 9) throw(runtime_error("/proc/<pid>/stat format error"));
-    comm = t.data();
-    comm = comm.substr(1, comm.size()-2);
+    string ss = s;
+    size_t ps = ss.find_first_of('('), pe = ss.find_last_of(')');
+    if (ps == string::npos || pe == string::npos)
+      throw(runtime_error("Could not read process name in /proc/<pid>/stat"));
+
+    int n = sscanf(s, "%d", &pid);
+    if (n != 1) throw(runtime_error("Could not read pid in /proc/<pid>/stat"));
+
+    //                       3  4  5  6  7   8   9   10  11  12  13  14  15  16  17  18  19  20  21  22   23  24
+    n = sscanf(s + pe + 1, " %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu %lu %ld",
+	       &state, &ppid, &pgrp, &session, &starttime, &vsize, &rss);
+    if (n != 7) throw(runtime_error("/proc/<pid>/stat format error"));
+
+    comm = ss.substr(ps + 1, pe - ps - 1);
   }
 };
 
@@ -135,6 +143,9 @@ void loop(shared_ptr<thread> childTh) {
 
     {
       auto m = getProcesses();
+
+      if (m.count(pid) == 0) throw(runtime_error("Could not retrieve process information of oomstaller"));
+
       for(auto e : m) {
 	if ((e.second.state != 'R' && e.second.state != 'T' && e.second.state != 'D') ||
 	    !isTarget(m, &e.second)) continue;
@@ -148,15 +159,16 @@ void loop(shared_ptr<thread> childTh) {
 
     long freeMem = readMemInfo("MemAvailable:"), usableMem = freeMem / pageSize * 1024 + usedMem;
 
-    long m = usedMem;
+    long m = usedMem, n = proc.size();
     for(auto e : proc) {
       char nextState = '\0';
       if (e.pid == pidLargestRSS) {
 	nextState = 'R';
       } else {
-	if (m >= usableMem * memThres || freeMem < minFreeMem) {
+	if (m >= usableMem * memThres || freeMem < minFreeMem || (maxParallel > 0 && n > maxParallel)) {
 	  nextState = 'T';
 	  m -= e.rss;
+	  n--;
 	} else {
 	  nextState = 'R';
 	}
@@ -186,11 +198,15 @@ void execChild(string cmd) {
 }
 
 void handler(int n) {
-  auto m = getProcesses();
-  for(auto e : m) {
-    if (e.second.ppid != pid) continue;
-    kill(-e.second.pgrp, SIGCONT);
-    kill(-e.second.pgrp, n);
+  try {
+    auto m = getProcesses();
+    for(auto e : m) {
+      if (e.second.ppid != pid) continue;
+      kill(-e.second.pgrp, SIGCONT);
+      kill(-e.second.pgrp, n);
+    }
+  } catch(exception &ex) {
+    cerr << ex.what() << endl;
   }
 
   unique_lock<mutex> lock(mtx);
@@ -216,20 +232,20 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << "     This tool suspends processes so that memory usage by running build" << endl;
   cerr << "     processes does not exceed the specified percentage of available memory." << endl;
   cerr << endl;
+  cerr << "  --max-parallel <number of processes>     default:  0" << endl;
+  cerr << endl;
+  cerr << "     Suspends processes so that the number of running build processes" << endl;
+  cerr << "     does not exceed the specified number. 0 means no limit." << endl;
+  cerr << endl;
   cerr << "  --period <seconds>                       default:   1.0" << endl;
   cerr << endl;
   cerr << "     Specifies the interval at which memory usage of each process is checked" << endl;
   cerr << "     and processes are controlled." << endl;
   cerr << endl;
-  cerr << "  --thrash <minimum available memory (MB)>  default: 256.0" << endl;
+  cerr << "  --thrash <minimum available memory (MB)> default: 256.0" << endl;
   cerr << endl;
   cerr << "     If the amount of available memory falls below the specified value, it is" << endl;
   cerr << "     assumed that swap thrashing is occurring." << endl;
-  cerr << endl;
-  cerr << "  --uid <uid>  default: the UID of the process" << endl;
-  cerr << endl;
-  cerr << "     When oomstaller is executed inside a fakeroot environment, the real UID" << endl;
-  cerr << "     has to be provided to work correctly." << endl;
   cerr << endl;
   cerr << "TIPS" << endl;
   cerr << "     If you kill this tool with SIGKILL, a large number of build processes" << endl;
@@ -244,7 +260,7 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     See https://github.com/shibatch/oomstaller" << endl;
   cerr << endl;
-  cerr << "oomstaller 0.2.0" << endl;
+  cerr << "oomstaller 0.3.0" << endl;
   cerr << endl;
 
   exit(-1);
@@ -259,25 +275,37 @@ int main(int argc, char **argv) {
       if (nextArg+1 >= argc) showUsage(argv[0]);
       char *p;
       memThres = strtod(argv[nextArg+1], &p) * 0.01;
-      if (p == argv[nextArg+1]) showUsage(argv[0], "A real value is expected after --thres.");
+      if (p == argv[nextArg+1] || *p || memThres < 0)
+	showUsage(argv[0], "A non-negative real value is expected after --thres.");
+      nextArg++;
+    } else if (string(argv[nextArg]) == "--max-parallel") {
+      if (nextArg+1 >= argc) showUsage(argv[0]);
+      char *p;
+      maxParallel = strtol(argv[nextArg+1], &p, 0);
+      if (p == argv[nextArg+1] || *p || maxParallel < 0)
+	showUsage(argv[0], "A non-negative integer is expected after --max-parallel.");
       nextArg++;
     } else if (string(argv[nextArg]) == "--period") {
       if (nextArg+1 >= argc) showUsage(argv[0]);
       char *p;
       period = strtod(argv[nextArg+1], &p);
-      if (p == argv[nextArg+1]) showUsage(argv[0], "A real value is expected after --period.");
+      if (p == argv[nextArg+1] || *p || period < 0)
+	showUsage(argv[0], "A non-negative real value is expected after --period.");
       nextArg++;
     } else if (string(argv[nextArg]) == "--thrash") {
       if (nextArg+1 >= argc) showUsage(argv[0]);
       char *p;
       minFreeMem = strtod(argv[nextArg+1], &p) * 1024;
-      if (p == argv[nextArg+1]) showUsage(argv[0], "A real value is expected after --thrash.");
+      if (p == argv[nextArg+1] || *p || minFreeMem < 0)
+	showUsage(argv[0], "A non-negative real value is expected after --thrash.");
       nextArg++;
     } else if (string(argv[nextArg]) == "--uid") {
       if (nextArg+1 >= argc) showUsage(argv[0]);
       char *p;
-      uid = strtol(argv[nextArg+1], &p, 0);
-      if (p == argv[nextArg+1]) showUsage(argv[0], "An integer is expected after --uid.");
+      long l = strtol(argv[nextArg+1], &p, 0);
+      uid = l;
+      if (p == argv[nextArg+1] || *p || l < 0)
+	showUsage(argv[0], "A non-negative integer is expected after --uid.");
       nextArg++;
     } else if (string(argv[nextArg]).substr(0, 2) == "--") {
       showUsage(argv[0], string("Unrecognized option : ") + argv[nextArg]);
@@ -287,6 +315,11 @@ int main(int argc, char **argv) {
   }
 
   if (nextArg >= argc) showUsage(argv[0], "");
+
+  if (getProcesses().count(pid) == 0) {
+    cerr << argv[0] << " : Could not retrieve process information of oomstaller" << endl;
+    exit(-1);
+  }
 
   signal(SIGINT , handler);
   signal(SIGTERM, handler);
@@ -312,7 +345,7 @@ int main(int argc, char **argv) {
     loop(childTh);
   } catch(exception &ex) {
     cerr << argv[0] << " : " << ex.what() << endl;
-    kill(pid, SIGTERM);
+    kill(0, SIGTERM);
   }
 
   childTh->join();

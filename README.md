@@ -19,7 +19,7 @@ good way to know the best number of CPU cores to use beforehand.
 This tool monitors the memory usage of each process when performing a
 build, and suspends processes as necessary to prevent swapping from
 occurring. This allows you to build using all CPU cores without
-worrying about swapping occurring.
+worrying about swap thrashing.
 
 
 #### How it works
@@ -56,16 +56,18 @@ priority is given first to the execution of the process occupying the
 largest amount of memory. The process occupying the largest amount of
 memory will not be suspended under any circumstances. The remaining
 running processes are selected based on the time when the process
-started running. The later a process is started, the more priority it
-will be given to suspend. This avoids the same process being suspended
-and resumed repeatedly, disrupting the build order, or suspending
-tools that are crucial to the build.
+started running. The earlier a process is started, the more priority
+it will be given to execution. This avoids the same process being
+suspended and resumed repeatedly, disrupting the build order, or
+suspending processes that are crucial to the build.
 
 The target processes to be suspended are selected by referencing the
 parent-child relationship of the processes. Only processes that are
 descendants of the command invoked as an argument of oomstaller will
-be suspended, so tools that are not related to the build will not be
-suspended.
+be suspended, thus processes that are not related to the build will
+never be suspended. It does not require information about which
+processes are involved in the build, and can reliably control only the
+processes involved in the build.
 
 
 ### How to build
@@ -104,6 +106,11 @@ This tool suspends processes so that memory usage by running build
 processes does not exceed the specified percentage of available
 memory.
 
+`--max-parallel <number of processes>`     default:  0
+
+Suspends processes so that the number of running build processes
+does not exceed the specified number. 0 means no limit.
+
 `--period <seconds>`                       default:   1.0
 
 Specifies the interval at which memory usage of each process is checked
@@ -113,11 +120,6 @@ and processes are controlled.
 
 If the amount of available memory falls below the specified value, it is
 assumed that swap thrashing is occurring.
-
-`--uid <uid>`                           default: the UID of the process
-
-When oomstaller is executed inside a fakeroot environment, the real
-UID has to be provided to work correctly.
 
 
 ### Tips
