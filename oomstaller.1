@@ -1,0 +1,48 @@
+.\" Manpage for oomstaller
+.\" Contact shibatch@users.sourceforge.net to correct errors.
+.TH oomstaller 1 "01 Dec 2024" "0.3.0" "oomstaller man page"
+.SH NAME
+oomstaller \- suppress swap thrashing at build time
+.SH SYNOPSIS
+oomstaller [<options>] command [arg] ...
+.SH DESCRIPTION
+This tool monitors the memory usage of each process when performing a build, and suspends processes as necessary to prevent swap thrashing from occuring.
+.sp
+.TP
+To perform a build using this tool, specify make or ninja as the argument of this tool and execute as follows.
+.INDENT 4
+.sp
+.EX
+$ oomstaller make -j `nproc`
+.EE
+.UNINDENT
+.SH OPTIONS
+.TP
+.BR \-\-thres " " <percentage, " " default=75>
+This tool suspends processes so that memory usage by running build processes does not exceed the specified percentage of available memory.
+.TP
+.BR \-\-max\-parallel " " <number " " of " " processes, " " default=0>
+Suspends processes so that the number of running build processes does not exceed the specified number. 0 means no limit.
+.TP
+.BR \-\-period " " <seconds, " " default=1>
+Specifies the interval at which memory usage of each process is checked and processes are controlled.
+.TP
+.BR \-\-thrash " " <minimum " "available " "memory " "(MB), " " default=256>
+If the amount of available memory falls below the specified value, it is assumed that swap thrashing is occurring.
+.SH TIPS
+If you kill this tool with SIGKILL, a large number of build processes will remain suspended with SIGSTOP. To prevent this from happening, use SIGTERM or SIGINT to kill this tool.
+.sp
+.TP
+You can send SIGCONT to all processes run by you with the following command.
+.INDENT 4
+.sp
+.EX
+$ killall -v -s CONT -u $USER -r '.*'
+.EE
+.UNINDENT
+.SH SEE ALSO
+.TP
+.B Home Page
+\fI\%https://github.com/shibatch/oomstaller\fP
+.SH AUTHOR
+Naoki Shibata (shibatch@users.sourceforge.net)

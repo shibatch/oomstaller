@@ -224,8 +224,8 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "DESCRIPTION" << endl;
   cerr << "     This tool monitors the memory usage of each process when performing a" << endl;
-  cerr << "     build, and suspends processes as necessary to prevent swapping from" << endl;
-  cerr << "     occurring." << endl;
+  cerr << "     build, and suspends processes as necessary to prevent swap thrashing" << endl;
+  cerr << "     from occurring." << endl;
   cerr << endl;
   cerr << "  --thres <percentage>                     default:  75.0" << endl;
   cerr << endl;

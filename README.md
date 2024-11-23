@@ -17,8 +17,8 @@ small number, but this is a waste of valuable CPU. Also, there is no
 good way to know the best number of CPU cores to use beforehand.
 
 This tool monitors the memory usage of each process when performing a
-build, and suspends processes as necessary to prevent swapping from
-occurring. This allows you to build using all CPU cores without
+build, and suspends processes as necessary to prevent swap thrashing
+from occurring. This allows you to build using all CPU cores without
 worrying about swap thrashing.
 
 
