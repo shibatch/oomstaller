@@ -108,8 +108,9 @@ memory.
 
 `--max-parallel <number of processes>`     default:  0
 
-Suspends processes so that the number of running build processes
-does not exceed the specified number. 0 means no limit.
+Suspends processes so that the number of running build processes does
+not exceed the specified number. 0 means no limit. A process is
+counted as one process even if it has multiple threads.
 
 `--period <seconds>`                       default:   1.0
 

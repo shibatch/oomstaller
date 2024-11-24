@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -62,26 +63,55 @@ struct ProcInfo {
 
   ProcInfo() {}
 
-  ProcInfo(const char *s) {
-    string ss = s;
+  ProcInfo(FILE *fpstat, const char *dn) {
+    vector<char> line(1024);
+    if (fgets(line.data(), line.size(), fpstat) == NULL)
+      throw(runtime_error("Could not read /proc/<pid>/stat"));
+
+    string ss = line.data();
     size_t ps = ss.find_first_of('('), pe = ss.find_last_of(')');
     if (ps == string::npos || pe == string::npos)
       throw(runtime_error("Could not read process name in /proc/<pid>/stat"));
 
-    int n = sscanf(s, "%d", &pid);
+    int n = sscanf(line.data(), "%d", &pid);
     if (n != 1) throw(runtime_error("Could not read pid in /proc/<pid>/stat"));
 
-    //                       3  4  5  6  7   8   9   10  11  12  13  14  15  16  17  18  19  20  21  22   23  24
-    n = sscanf(s + pe + 1, " %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu %lu %ld",
+    //                                 3  4  5  6  7   8   9   10  11  12  13  14  15  16  17  18  19  20  21  22   23  24
+    n = sscanf(line.data() + pe + 1, " %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu %lu %ld",
 	       &state, &ppid, &pgrp, &session, &starttime, &vsize, &rss);
     if (n != 7) throw(runtime_error("/proc/<pid>/stat format error"));
 
     comm = ss.substr(ps + 1, pe - ps - 1);
+
+    //
+
+    DIR *taskdir = opendir((string("/proc/") + dn + "/task").c_str());
+    if (!taskdir) return;
+
+    struct dirent *entry;
+    while((entry = readdir(taskdir))) {
+      char *p;
+      strtoul(entry->d_name, &p, 10);
+      if (*p != '\0') continue;
+
+      FILE *fp = fopen((string("/proc/") + dn + "/task/" + entry->d_name + "/stat").c_str(), "r");
+      if (!fp) continue;
+
+      if (fgets(line.data(), line.size(), fp) != NULL) {
+	pe = string(line.data()).find_last_of(')');
+	char c;
+	if (pe != string::npos && sscanf(line.data() + pe + 1, " %c", &c) == 1 &&
+	    (c == 'R' || c == 'T' || c == 'D')) state = c;
+      }
+
+      fclose(fp);
+    }
+
+    closedir(taskdir);
   }
 };
 
 unordered_map<int, ProcInfo> getProcesses() {
-  vector<char> line(1024);
   unordered_map<int, ProcInfo> ret;
 
   DIR *procdir = opendir("/proc");
@@ -97,11 +127,9 @@ unordered_map<int, ProcInfo> getProcesses() {
     FILE *fp = fopen((string("/proc/") + entry->d_name + "/stat").c_str(), "r");
     if (!fp) continue;
 
-    if (fstat(fileno(fp), &statbuf) == 0) {
-      if (statbuf.st_uid == uid && fgets(line.data(), line.size(), fp) != NULL) {
-	ProcInfo pi(line.data());
-	ret[pi.pid] = pi;
-      }
+    if (fstat(fileno(fp), &statbuf) == 0 && statbuf.st_uid == uid) {
+      ProcInfo pi(fp, entry->d_name);
+      ret[pi.pid] = pi;
     }
 
     fclose(fp);
@@ -159,8 +187,10 @@ void loop(shared_ptr<thread> childTh) {
 
     long freeMem = readMemInfo("MemAvailable:"), usableMem = freeMem / pageSize * 1024 + usedMem;
 
+    unordered_set<int> activePids, removedPids;
     long m = usedMem, n = proc.size();
     for(auto e : proc) {
+      activePids.insert(e.pid);
       char nextState = '\0';
       if (e.pid == pidLargestRSS) {
 	nextState = 'R';
@@ -182,6 +212,17 @@ void loop(shared_ptr<thread> childTh) {
 	kill(e.pid, SIGSTOP);
       }
     }
+
+    // Handling of processes that have terminated or slept on its own after sending SIGSTOP
+
+    for(auto i : stoppedProcs) if (activePids.count(i) == 0) removedPids.insert(i);
+
+    for(auto i : removedPids) {
+      kill(i, SIGCONT);
+      stoppedProcs.erase(i);
+    }
+
+    //
 
     condvar.wait_for(lock, chrono::milliseconds((long)(period * 1000)));
   }
@@ -235,7 +276,8 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << "  --max-parallel <number of processes>     default:  0" << endl;
   cerr << endl;
   cerr << "     Suspends processes so that the number of running build processes" << endl;
-  cerr << "     does not exceed the specified number. 0 means no limit." << endl;
+  cerr << "     does not exceed the specified number. 0 means no limit. A process is" << endl;
+  cerr << "     counted as one process even if it has multiple threads." << endl;
   cerr << endl;
   cerr << "  --period <seconds>                       default:   1.0" << endl;
   cerr << endl;
