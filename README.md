@@ -130,6 +130,15 @@ cores are not used in order to reduce memory usage. Increasing this
 value too much would increase the time where only one process can run
 due to swap thrashing.
 
+When the available memory is less than the value set by --thrash
+option, oomstaller assumes that swap thrashing is occurring and
+suspends all processes except the process occupying the largest amount
+of memory. This has the effect of minimizing swapping. The detection
+of swap thrashing can be disabled by specifying 0 with --thrash
+option. This allows more processes to run with aggressive swapping,
+which may reduce build time, but may require large amounts of swap
+space.
+
 We recommend specifying "-j \`nproc\`" option to ninja. ninja usually
 runs jobs with more threads than CPU cores. This is effective to
 reduce build time if there is sufficient memory. However, this will
