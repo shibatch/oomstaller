@@ -30,27 +30,22 @@ const long pageSize = sysconf(_SC_PAGESIZE);
 uid_t uid = getuid();
 const pid_t pid = getpid();
 
-unordered_map<string, uint64_t> readMeminfo() {
+uint64_t readMemInfo(const string &s) {
   FILE *fp = fopen("/proc/meminfo", "r");
   if (!fp) throw(runtime_error("readMeminfo() : could not open /proc/meminfo"));
-  vector<char> line(1024), key(1024);
-  unordered_map<string, uint64_t> map;
+  vector<char> line(1024);
 
   while(!feof(fp)) {
     if (fgets(line.data(), line.size(), fp) == NULL) break;
-    unsigned long long ull;
-    if (sscanf(line.data(), "%1000s %llu", key.data(), &ull) != 2) continue;
-    map[key.data()] = ull;
+    if (strncmp(line.data(), s.c_str(), s.size()) == 0) {
+      unsigned long long ull;
+      if (sscanf(line.data() + s.size(), " %llu", &ull) != 1)
+	throw(runtime_error("readMeminfo() : /proc/meminfo format error"));
+      fclose(fp);
+      return ull;
+    }
   }
-  fclose(fp);
-
-  return map;
-}
-
-uint64_t readMemInfo(const string &s) {
-  auto m = readMeminfo();
-  if (m.count(s) == 0) throw(runtime_error(("readMemInfo() : /proc/meminfo does not have entry for " + s).c_str()));
-  return m[s];
+  throw(runtime_error(("readMemInfo() : /proc/meminfo does not have entry for " + s).c_str()));
 }
 
 struct ProcInfo {
@@ -58,7 +53,7 @@ struct ProcInfo {
   int pid, ppid, pgrp, session;
   long long unsigned starttime;
   long unsigned vsize;
-  long int rss;
+  long int rss, num_threads;
   char state;
 
   ProcInfo() {}
@@ -77,37 +72,39 @@ struct ProcInfo {
     if (n != 1) throw(runtime_error("Could not read pid in /proc/<pid>/stat"));
 
     //                                 3  4  5  6  7   8   9   10  11  12  13  14  15  16  17  18  19  20  21  22   23  24
-    n = sscanf(line.data() + pe + 1, " %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu %lu %ld",
-	       &state, &ppid, &pgrp, &session, &starttime, &vsize, &rss);
-    if (n != 7) throw(runtime_error("/proc/<pid>/stat format error"));
+    n = sscanf(line.data() + pe + 1, " %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %ld %*d %llu %lu %ld",
+	       &state, &ppid, &pgrp, &session, &num_threads, &starttime, &vsize, &rss);
+    if (n != 8) throw(runtime_error("/proc/<pid>/stat format error"));
 
     comm = ss.substr(ps + 1, pe - ps - 1);
 
     //
 
-    DIR *taskdir = opendir((string("/proc/") + dn + "/task").c_str());
-    if (!taskdir) return;
+    if (num_threads > 1) {
+      DIR *taskdir = opendir((string("/proc/") + dn + "/task").c_str());
+      if (!taskdir) return;
 
-    struct dirent *entry;
-    while((entry = readdir(taskdir))) {
-      char *p;
-      strtoul(entry->d_name, &p, 10);
-      if (*p != '\0') continue;
+      struct dirent *entry;
+      while((entry = readdir(taskdir))) {
+	char *p;
+	strtoul(entry->d_name, &p, 10);
+	if (*p != '\0') continue;
 
-      FILE *fp = fopen((string("/proc/") + dn + "/task/" + entry->d_name + "/stat").c_str(), "r");
-      if (!fp) continue;
+	FILE *fp = fopen((string("/proc/") + dn + "/task/" + entry->d_name + "/stat").c_str(), "r");
+	if (!fp) continue;
 
-      if (fgets(line.data(), line.size(), fp) != NULL) {
-	pe = string(line.data()).find_last_of(')');
-	char c;
-	if (pe != string::npos && sscanf(line.data() + pe + 1, " %c", &c) == 1 &&
-	    (c == 'R' || c == 'T' || c == 'D')) state = c;
+	if (fgets(line.data(), line.size(), fp) != NULL) {
+	  pe = string(line.data()).find_last_of(')');
+	  char c;
+	  if (pe != string::npos && sscanf(line.data() + pe + 1, " %c", &c) == 1 &&
+	      (c == 'R' || c == 'T' || c == 'D')) state = c;
+	}
+
+	fclose(fp);
       }
 
-      fclose(fp);
+      closedir(taskdir);
     }
-
-    closedir(taskdir);
   }
 };
 

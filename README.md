@@ -133,11 +133,14 @@ due to swap thrashing.
 When the available memory is less than the value set by --thrash
 option, oomstaller assumes that swap thrashing is occurring and
 suspends all processes except the process occupying the largest amount
-of memory. This has the effect of minimizing swapping. The detection
-of swap thrashing can be disabled by specifying 0 with --thrash
-option. This allows more processes to run with aggressive swapping,
-which may reduce build time, but may require large amounts of swap
-space.
+of memory. This has the effect of minimizing swapping. Although
+oomstaller is intended primarily to suppress swapping during builds by
+suspending the build process, it can also be configured to allow
+swapping while attempting to reduce the build time. The detection of
+swap thrashing can be disabled by specifying "--thrash 0" option. This
+allows more processes to run with aggressive swapping, which may
+reduce the build time if the swap space is fast, but would require a
+large swap space.
 
 We recommend specifying "-j \`nproc\`" option to ninja. ninja usually
 runs jobs with more threads than CPU cores. This is effective to
