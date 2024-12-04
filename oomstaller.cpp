@@ -182,7 +182,7 @@ void loop(shared_ptr<thread> childTh) {
       }
     }
 
-    long freeMem = readMemInfo("MemAvailable:"), usableMem = freeMem / pageSize * 1024 + usedMem;
+    long freeMem = readMemInfo("MemAvailable:"), usableMem = freeMem * 1024 / pageSize + usedMem;
     bool thrashDetected = freeMem < minFreeMem;
 
     unordered_set<int> activePids, removedPids;
