@@ -24,7 +24,7 @@
 using namespace std;
 
 double memThres = 0.75, period = 1.0, minFreeMem = 256 * 1024;
-int maxParallel = 0;
+int maxParallel = 0, maxParallelThrash = 1;
 
 const long pageSize = sysconf(_SC_PAGESIZE);
 uid_t uid = getuid();
@@ -183,6 +183,7 @@ void loop(shared_ptr<thread> childTh) {
     }
 
     long freeMem = readMemInfo("MemAvailable:"), usableMem = freeMem / pageSize * 1024 + usedMem;
+    bool thrashDetected = freeMem < minFreeMem;
 
     unordered_set<int> activePids, removedPids;
     long m = usedMem, n = proc.size();
@@ -192,7 +193,8 @@ void loop(shared_ptr<thread> childTh) {
       if (e.pid == pidLargestRSS) {
 	nextState = 'R';
       } else {
-	if (m >= usableMem * memThres || freeMem < minFreeMem || (maxParallel > 0 && n > maxParallel)) {
+	if (m >= usableMem * memThres || (maxParallel > 0 && n > maxParallel) ||
+	    (thrashDetected && maxParallelThrash > 0 && n > maxParallelThrash)) {
 	  nextState = 'T';
 	  m -= e.rss;
 	  n--;
@@ -265,23 +267,28 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << "     build, and suspends processes as necessary to prevent swap thrashing" << endl;
   cerr << "     from occurring." << endl;
   cerr << endl;
-  cerr << "  --thres <percentage>                     default:  75.0" << endl;
+  cerr << "  --thres <percentage>                            default:  75.0" << endl;
   cerr << endl;
   cerr << "     This tool suspends processes so that memory usage by running build" << endl;
   cerr << "     processes does not exceed the specified percentage of available memory." << endl;
   cerr << endl;
-  cerr << "  --max-parallel <number of processes>     default:  0" << endl;
+  cerr << "  --max-parallel <number of processes>            default:   0" << endl;
   cerr << endl;
   cerr << "     Suspends processes so that the number of running build processes" << endl;
   cerr << "     does not exceed the specified number. 0 means no limit. A process is" << endl;
   cerr << "     counted as one process even if it has multiple threads." << endl;
   cerr << endl;
-  cerr << "  --period <seconds>                       default:   1.0" << endl;
+  cerr << "  --max-parallel-thrash <number of processes>     default:   1" << endl;
+  cerr << endl;
+  cerr << "     Specifies the maximum number of processes to run when thrashing is" << endl;
+  cerr << "     detected. 0 means no limit." << endl;
+  cerr << endl;
+  cerr << "  --period <seconds>                              default:   1.0" << endl;
   cerr << endl;
   cerr << "     Specifies the interval at which memory usage of each process is checked" << endl;
   cerr << "     and processes are controlled." << endl;
   cerr << endl;
-  cerr << "  --thrash <minimum available memory (MB)> default: 256.0" << endl;
+  cerr << "  --thrash <minimum available memory (MB)>        default: 256.0" << endl;
   cerr << endl;
   cerr << "     If the amount of available memory falls below the specified value, it is" << endl;
   cerr << "     assumed that swap thrashing is occurring." << endl;
@@ -323,6 +330,13 @@ int main(int argc, char **argv) {
       maxParallel = strtol(argv[nextArg+1], &p, 0);
       if (p == argv[nextArg+1] || *p || maxParallel < 0)
 	showUsage(argv[0], "A non-negative integer is expected after --max-parallel.");
+      nextArg++;
+    } else if (string(argv[nextArg]) == "--max-parallel-thrash") {
+      if (nextArg+1 >= argc) showUsage(argv[0]);
+      char *p;
+      maxParallelThrash = strtol(argv[nextArg+1], &p, 0);
+      if (p == argv[nextArg+1] || *p || maxParallelThrash < 0)
+	showUsage(argv[0], "A non-negative integer is expected after --max-parallel-thrash.");
       nextArg++;
     } else if (string(argv[nextArg]) == "--period") {
       if (nextArg+1 >= argc) showUsage(argv[0]);

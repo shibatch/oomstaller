@@ -100,24 +100,29 @@ oomstaller make -j `nproc`
 
 ### Options
 
-`--thres <percentage>`                     default:  75.0
+`--thres <percentage>`                         default:  75.0
 
 This tool suspends processes so that memory usage by running build
 processes does not exceed the specified percentage of available
 memory.
 
-`--max-parallel <number of processes>`     default:  0
+`--max-parallel <number of processes>`         default:   0
 
 Suspends processes so that the number of running build processes does
 not exceed the specified number. 0 means no limit. A process is
 counted as one process even if it has multiple threads.
 
-`--period <seconds>`                       default:   1.0
+`--max-parallel-thrash <number of processes>`  default:   1
+
+Specifies the maximum number of processes to run when thrashing is
+detected. 0 means no limit.
+
+`--period <seconds>`                           default:   1.0
 
 Specifies the interval at which memory usage of each process is checked
 and processes are controlled.
 
-`--thrash <minimum available memory (MB)>`  default: 256.0
+`--thrash <minimum available memory (MB)>`     default: 256.0
 
 If the amount of available memory falls below the specified value, it is
 assumed that swap thrashing is occurring.
@@ -127,20 +132,24 @@ assumed that swap thrashing is occurring.
 
 Lowering the value of --thres results in increased time where some
 cores are not used in order to reduce memory usage. Increasing this
-value too much would increase the time where only one process can run
-due to swap thrashing.
+value too much would increase the time where only a few processes can
+run due to swap thrashing.
 
 When the available memory is less than the value set by --thrash
 option, oomstaller assumes that swap thrashing is occurring and
 suspends all processes except the process occupying the largest amount
-of memory. This has the effect of minimizing swapping. Although
-oomstaller is intended primarily to suppress swapping during builds by
-suspending the build process, it can also be configured to allow
-swapping while attempting to reduce the build time. The detection of
-swap thrashing can be disabled by specifying "--thrash 0" option. This
-allows more processes to run with aggressive swapping, which may
-reduce the build time if the swap space is fast, but would require a
-large swap space.
+of memory. This has the effect of minimizing swapping.
+
+Although oomstaller is designed primarily to suppress swapping during
+builds by suspending the build process, it can also be configured to
+allow swapping while attempting to reduce the build time. The number
+of processes executed when thrashing is detected can be specified with
+--max-parallel-thrash option. By increasing this number, it may be
+possible to reduce build time by actively swapping processes. The
+actual effect depends greatly on the speed of swap space. Even when
+this number of processes is increased, the build processes are
+suspended as necessary depending on memory usage. Increasing this
+number of processes may require a large swap space.
 
 We recommend specifying "-j \`nproc\`" option to ninja. ninja usually
 runs jobs with more threads than CPU cores. This is effective to

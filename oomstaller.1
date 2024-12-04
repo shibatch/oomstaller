@@ -24,6 +24,9 @@ This tool suspends processes so that memory usage by running build processes doe
 .BR \-\-max\-parallel " " <number " " of " " processes, " " default=0>
 Suspends processes so that the number of running build processes does not exceed the specified number. 0 means no limit. A process is counted as one process even if it has multiple threads.
 .TP
+.BR \-\-max\-parallel-thrash " " <number " " of " " processes, " " default=1>
+Specifies the maximum number of processes to run when thrashing is detected. 0 means no limit.
+.TP
 .BR \-\-period " " <seconds, " " default=1>
 Specifies the interval at which memory usage of each process is checked and processes are controlled.
 .TP
