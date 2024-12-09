@@ -464,5 +464,5 @@ int main(int argc, char **argv) {
     cout << "Total : " << pt << " periods" << endl;
   }
 
-  exit(childExitCode);
+  return childExitCode;
 }
