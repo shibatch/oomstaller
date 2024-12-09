@@ -127,6 +127,10 @@ and processes are controlled.
 If the amount of available memory falls below the specified value, it is
 assumed that swap thrashing is occurring.
 
+`--show-stat`
+
+Displays statistics when finished.
+
 
 ### Tips
 

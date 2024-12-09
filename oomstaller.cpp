@@ -30,6 +30,9 @@ const long pageSize = sysconf(_SC_PAGESIZE);
 uid_t uid = getuid();
 const pid_t pid = getpid();
 
+bool showStat = false;
+unordered_map<int, long> statInfo;
+
 uint64_t readMemInfo(const string &s) {
   FILE *fp = fopen("/proc/meminfo", "r");
   if (!fp) throw(runtime_error("readMeminfo() : could not open /proc/meminfo"));
@@ -187,6 +190,7 @@ void loop(shared_ptr<thread> childTh) {
 
     unordered_set<int> activePids, removedPids;
     long m = usedMem, n = proc.size();
+    int nRunningProcs = 0;
     for(auto e : proc) {
       activePids.insert(e.pid);
       char nextState = '\0';
@@ -206,6 +210,7 @@ void loop(shared_ptr<thread> childTh) {
       if (nextState == 'R') {
 	kill(e.pid, SIGCONT);
 	stoppedProcs.erase(e.pid);
+	nRunningProcs++;
       } else {
 	stoppedProcs.insert(e.pid);
 	kill(e.pid, SIGSTOP);
@@ -220,6 +225,11 @@ void loop(shared_ptr<thread> childTh) {
       kill(i, SIGCONT);
       stoppedProcs.erase(i);
     }
+
+    // Update statistics info
+
+    if (thrashDetected) statInfo[-1]++;
+    statInfo[nRunningProcs]++;
 
     //
 
@@ -237,7 +247,7 @@ void execChild(string cmd) {
   condvar.notify_all();
 }
 
-void handler(int n) {
+void handlerThread(int n) {
   try {
     auto m = getProcesses();
     for(auto e : m) {
@@ -251,6 +261,17 @@ void handler(int n) {
 
   unique_lock<mutex> lock(mtx);
   for(auto e : stoppedProcs) kill(e, SIGCONT);
+}
+
+shared_ptr<thread> handlerTh;
+
+void handler(int n) {
+  signal(SIGINT , SIG_IGN);
+  signal(SIGTERM, SIG_IGN);
+  signal(SIGQUIT, SIG_IGN);
+  signal(SIGHUP , SIG_IGN);
+
+  handlerTh = make_shared<thread>(handlerThread, n);
 }
 
 void showUsage(const string& argv0, const string& mes = "") {
@@ -292,6 +313,10 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     If the amount of available memory falls below the specified value, it is" << endl;
   cerr << "     assumed that swap thrashing is occurring." << endl;
+  cerr << endl;
+  cerr << "  --show-stat" << endl;
+  cerr << endl;
+  cerr << "     Displays statistics when finished." << endl;
   cerr << endl;
   cerr << "TIPS" << endl;
   cerr << "     If you kill this tool with SIGKILL, a large number of build processes" << endl;
@@ -342,8 +367,8 @@ int main(int argc, char **argv) {
       if (nextArg+1 >= argc) showUsage(argv[0]);
       char *p;
       period = strtod(argv[nextArg+1], &p);
-      if (p == argv[nextArg+1] || *p || period < 0)
-	showUsage(argv[0], "A non-negative real value is expected after --period.");
+      if (p == argv[nextArg+1] || *p || period <= 0)
+	showUsage(argv[0], "A positive value is expected after --period.");
       nextArg++;
     } else if (string(argv[nextArg]) == "--thrash") {
       if (nextArg+1 >= argc) showUsage(argv[0]);
@@ -360,6 +385,8 @@ int main(int argc, char **argv) {
       if (p == argv[nextArg+1] || *p || l < 0)
 	showUsage(argv[0], "A non-negative integer is expected after --uid.");
       nextArg++;
+    } else if (string(argv[nextArg]) == "--show-stat") {
+      showStat = true;
     } else if (string(argv[nextArg]).substr(0, 2) == "--") {
       showUsage(argv[0], string("Unrecognized option : ") + argv[nextArg]);
     } else {
@@ -373,6 +400,8 @@ int main(int argc, char **argv) {
     cerr << argv[0] << " : Could not retrieve process information of oomstaller" << endl;
     exit(-1);
   }
+
+  auto startTime = chrono::system_clock::now();
 
   signal(SIGINT , handler);
   signal(SIGTERM, handler);
@@ -402,9 +431,38 @@ int main(int argc, char **argv) {
   }
 
   childTh->join();
+  if (handlerTh) handlerTh->join();
 
   unique_lock<mutex> lock(mtx);
   for(auto e : stoppedProcs) kill(e, SIGCONT);
+
+  auto endTime = chrono::system_clock::now();
+
+  if (showStat) {
+    if (statInfo[0] > 0) statInfo[0]--;
+    if (statInfo[0] == 0) statInfo.erase(0);
+
+    time_t tStartTime = chrono::system_clock::to_time_t(startTime);
+    time_t tEndTime = chrono::system_clock::to_time_t(endTime);
+
+    cout << endl;
+    cout << "Start   : " << ctime(&tStartTime);
+    cout << "End     : " << ctime(&tEndTime);
+
+    chrono::duration<double> elapsed = endTime - startTime;
+    cout << "Elapsed : " << elapsed.count() << " seconds" << endl;
+
+    set<int> statKeys;
+    for(auto a : statInfo) statKeys.insert(a.first);
+    long pt = 0;
+    for(auto a : statKeys) {
+      if (a == -1) continue;
+      pt += statInfo[a];
+      cout << a << " processes running : " << statInfo[a] << " periods" << endl;
+    }
+    cout << "Thrashing detected : " << statInfo[-1] << " periods" << endl;
+    cout << "Total : " << pt << " periods" << endl;
+  }
 
   exit(childExitCode);
 }

@@ -1,7 +1,7 @@
 
 # Community Guidelines for Sustainability of Open-Source Ecosystem
 
-Version 1.0, 2024-??-??
+Version 1.0, 2024-12-01
 
 Copyright Naoki Shibata 2024. https://github.com/shibatch/nofreelunch
 

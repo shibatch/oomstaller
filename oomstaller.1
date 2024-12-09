@@ -32,6 +32,9 @@ Specifies the interval at which memory usage of each process is checked and proc
 .TP
 .BR \-\-thrash " " <minimum " "available " "memory " "(MB), " " default=256>
 If the amount of available memory falls below the specified value, it is assumed that swap thrashing is occurring.
+.TP
+.BR \-\-show\-stat
+Displays statistics when finished.
 .SH TIPS
 If you kill this tool with SIGKILL, a large number of build processes will remain suspended with SIGSTOP. To prevent this from happening, use SIGTERM or SIGINT to kill this tool.
 .sp
