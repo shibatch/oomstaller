@@ -100,12 +100,6 @@ oomstaller make -j `nproc`
 
 ### Options
 
-`--thres <percentage>`                         default:  75.0
-
-This tool suspends processes so that memory usage by running build
-processes does not exceed the specified percentage of available
-memory.
-
 `--max-parallel <number of processes>`         default:   0
 
 Suspends processes so that the number of running build processes does
@@ -122,27 +116,12 @@ detected. 0 means no limit.
 Specifies the interval at which memory usage of each process is checked
 and processes are controlled.
 
-`--thrash <minimum available memory (MB)>`     default: 256.0
-
-If the amount of available memory falls below the specified value, it is
-assumed that swap thrashing is occurring.
-
 `--show-stat`
 
 Displays statistics when finished.
 
 
 ### Tips
-
-Lowering the value of --thres results in increased time where some
-cores are not used in order to reduce memory usage. Increasing this
-value too much would increase the time where only a few processes can
-run due to swap thrashing.
-
-When the available memory is less than the value set by --thrash
-option, oomstaller assumes that swap thrashing is occurring and
-suspends all processes except the process occupying the largest amount
-of memory. This has the effect of minimizing swapping.
 
 Although oomstaller is designed primarily to suppress swapping during
 builds by suspending the build process, it can also be configured to
@@ -162,6 +141,9 @@ runs jobs with more threads than CPU cores. This is effective to
 reduce build time if there is sufficient memory. However, this will
 only consume extra memory in situations where there is not enough
 memory in which you might want to use this tool.
+
+Before benchmarking, run "sudo swapoff -a; sudo swapon -a" to reset
+the condition of the swap space.
 
 If you kill this tool with SIGKILL, a large number of build processes
 will remain suspended with SIGSTOP. To prevent this from happening,

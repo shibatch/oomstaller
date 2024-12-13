@@ -6,14 +6,20 @@
 #include <unordered_set>
 #include <set>
 #include <vector>
-#include <cstdio>
-#include <cstdint>
-#include <cstdlib>
-#include <cstring>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <memory>
+#include <chrono>
+
+#include <cstdio>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <climits>
+#include <cmath>
+#include <ctime>
+
 #include <signal.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -23,12 +29,12 @@
 
 using namespace std;
 
-double memThres = 0.75, period = 1.0, minFreeMem = 256 * 1024;
-int maxParallel = 0, maxParallelThrash = 1;
-
 const long pageSize = sysconf(_SC_PAGESIZE);
 uid_t uid = getuid();
 const pid_t pid = getpid();
+
+double period = 1.0;
+int maxParallel = 0, maxParallelThrash = 1;
 
 bool showStat = false;
 unordered_map<int, long> statInfo;
@@ -52,16 +58,17 @@ uint64_t readMemInfo(const string &s) {
 }
 
 struct ProcInfo {
-  string comm;
+  string comm, d_name;
   int pid, ppid, pgrp, session;
   long long unsigned starttime;
-  long unsigned vsize;
+  long unsigned vsize, vmswap = 0;
   long int rss, num_threads;
   char state;
 
   ProcInfo() {}
 
   ProcInfo(FILE *fpstat, const char *dn) {
+    d_name = dn;
     vector<char> line(1024);
     if (fgets(line.data(), line.size(), fpstat) == NULL)
       throw(runtime_error("Could not read /proc/<pid>/stat"));
@@ -80,6 +87,23 @@ struct ProcInfo {
     if (n != 8) throw(runtime_error("/proc/<pid>/stat format error"));
 
     comm = ss.substr(ps + 1, pe - ps - 1);
+
+    //
+
+    {
+      FILE *fp = fopen((string("/proc/") + d_name + "/status").c_str(), "r");
+
+      if (fp) {
+	while(!feof(fp)) {
+	  if (fgets(line.data(), line.size(), fp) == NULL) break;
+	  if (strncmp(line.data(), "VmSwap:", 7) == 0) {
+	    if (sscanf(line.data(), "%*s %lu", &vmswap) == 1) vmswap = vmswap * 1024 / pageSize;
+	    break;
+	  }
+	}
+	fclose(fp);
+      }
+    }
 
     //
 
@@ -157,7 +181,28 @@ mutex mtx;
 condition_variable condvar;
 
 void loop(shared_ptr<thread> childTh) {
+  // Clear the thrashing detection if swap space is used but total
+  // swap has not increased for 10 seconds
+  const int THRASHCOUNT1 = 10.0 / period;
+
+  // Clear the thrashing detection 3 seconds after total size of swap
+  // space is reduced
+  const int THRASHCOUNT2 = 3.0 / period;
+
+  // The estimated amount of memory that each process could
+  // potentially occupy is attenuated by this amount each time one
+  // process finishes
+  const double MEMMAXDECAY = pow(0.5, 1.0 / 10.0);
+
+  //
+
   unique_lock<mutex> lock(mtx);
+  unordered_set<int> lastActivePids;
+  double memMax = 0;
+
+  const long totalMem = readMemInfo("MemTotal:") * 1024 / pageSize;
+  long lastSwapFree = readMemInfo("SwapFree:");
+  int thrashTimer = 0;
 
   while(!exiting) {
     set<ProcInfo, bool(*)(const ProcInfo &lhs, const ProcInfo &rhs)>
@@ -166,8 +211,10 @@ void loop(shared_ptr<thread> childTh) {
       if (lhs.starttime < rhs.starttime) return false;
       return lhs.pid > rhs.pid; } };
 
-    long usedMem = 0;
-    int pidLargestRSS = 0;
+    long usedMem = 0, memMax2 = 0;
+    int pidLargest = 0;
+    unordered_set<int> activePids;
+    bool swapUsed = false;
 
     {
       auto m = getProcesses();
@@ -177,30 +224,60 @@ void loop(shared_ptr<thread> childTh) {
       for(auto e : m) {
 	if ((e.second.state != 'R' && e.second.state != 'T' && e.second.state != 'D') ||
 	    !isTarget(m, &e.second)) continue;
+	if (e.second.rss > memMax2) memMax2 = e.second.rss + e.second.vmswap;
 	usedMem += e.second.rss;
+	if (e.second.vmswap > 0) swapUsed = true;
 	proc.insert(e.second);
-	if (pidLargestRSS == 0 || e.second.rss > m.at(pidLargestRSS).rss) {
-	  pidLargestRSS = e.second.pid;
-	}
+	activePids.insert(e.second.pid);
+	if (pidLargest == 0 || (e.second.rss + e.second.vmswap > m.at(pidLargest).rss + m.at(pidLargest).vmswap))
+	    pidLargest = e.second.pid;
       }
     }
 
-    long freeMem = readMemInfo("MemAvailable:"), usableMem = freeMem * 1024 / pageSize + usedMem;
-    bool thrashDetected = freeMem < minFreeMem;
+    long freeMem = readMemInfo("MemAvailable:") * 1024 / pageSize, usableMem = freeMem + usedMem;
+    if (usableMem > totalMem) usableMem = totalMem;
 
-    unordered_set<int> activePids, removedPids;
-    long m = usedMem, n = proc.size();
+    // Detection of swap thrashing
+
+    long swapFree = readMemInfo("SwapFree:");
+    if (swapFree < lastSwapFree) {
+      thrashTimer = THRASHCOUNT1;
+    } else if (swapFree > lastSwapFree) {
+      if (thrashTimer > THRASHCOUNT2) thrashTimer = THRASHCOUNT2;
+    } else if (!swapUsed) {
+      thrashTimer = 0;
+    } else {
+      if (thrashTimer > 0) thrashTimer--;
+    }
+    lastSwapFree = swapFree;
+
+    // Calculate the number of parallel executions
+
+    for(auto a : lastActivePids) if (activePids.count(a) == 0) memMax *= MEMMAXDECAY;
+    lastActivePids = activePids;
+
+    // memMax2 is the maximum occupied memory by the currently running
+    // processes
+    // memMax is the estimated amount of memory that each process
+    // could potentially occupy
+    if (memMax2 > memMax) memMax = memMax2;
+
+    int maxParallelOP = INT_MAX;
+    if (memMax != 0) maxParallelOP = usableMem / memMax + 1;
+
+    // Determine the next state of each process
+
+    unordered_set<int> removedPids;
+    long n = proc.size();
     int nRunningProcs = 0;
     for(auto e : proc) {
-      activePids.insert(e.pid);
       char nextState = '\0';
-      if (e.pid == pidLargestRSS) {
+      if (e.pid == pidLargest) {
 	nextState = 'R';
       } else {
-	if (m >= usableMem * memThres || (maxParallel > 0 && n > maxParallel) ||
-	    (thrashDetected && maxParallelThrash > 0 && n > maxParallelThrash)) {
+	if (n > maxParallelOP || (maxParallel > 0 && n > maxParallel) ||
+	    ((thrashTimer > 0 || freeMem == 0) && maxParallelThrash > 0 && n > maxParallelThrash)) {
 	  nextState = 'T';
-	  m -= e.rss;
 	  n--;
 	} else {
 	  nextState = 'R';
@@ -228,7 +305,7 @@ void loop(shared_ptr<thread> childTh) {
 
     // Update statistics info
 
-    if (thrashDetected) statInfo[-1]++;
+    if (thrashTimer > 0 || freeMem == 0) statInfo[-1]++;
     statInfo[nRunningProcs]++;
 
     //
@@ -288,11 +365,6 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << "     build, and suspends processes as necessary to prevent swap thrashing" << endl;
   cerr << "     from occurring." << endl;
   cerr << endl;
-  cerr << "  --thres <percentage>                            default:  75.0" << endl;
-  cerr << endl;
-  cerr << "     This tool suspends processes so that memory usage by running build" << endl;
-  cerr << "     processes does not exceed the specified percentage of available memory." << endl;
-  cerr << endl;
   cerr << "  --max-parallel <number of processes>            default:   0" << endl;
   cerr << endl;
   cerr << "     Suspends processes so that the number of running build processes" << endl;
@@ -308,11 +380,6 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     Specifies the interval at which memory usage of each process is checked" << endl;
   cerr << "     and processes are controlled." << endl;
-  cerr << endl;
-  cerr << "  --thrash <minimum available memory (MB)>        default: 256.0" << endl;
-  cerr << endl;
-  cerr << "     If the amount of available memory falls below the specified value, it is" << endl;
-  cerr << "     assumed that swap thrashing is occurring." << endl;
   cerr << endl;
   cerr << "  --show-stat" << endl;
   cerr << endl;
@@ -331,7 +398,7 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     See https://github.com/shibatch/oomstaller" << endl;
   cerr << endl;
-  cerr << "oomstaller 0.3.0" << endl;
+  cerr << "oomstaller 0.4.0 rc1" << endl;
   cerr << endl;
 
   exit(-1);
@@ -342,14 +409,7 @@ int main(int argc, char **argv) {
 
   int nextArg;
   for(nextArg = 1;nextArg < argc;nextArg++) {
-    if (string(argv[nextArg]) == "--thres") {
-      if (nextArg+1 >= argc) showUsage(argv[0]);
-      char *p;
-      memThres = strtod(argv[nextArg+1], &p) * 0.01;
-      if (p == argv[nextArg+1] || *p || memThres < 0)
-	showUsage(argv[0], "A non-negative real value is expected after --thres.");
-      nextArg++;
-    } else if (string(argv[nextArg]) == "--max-parallel") {
+    if (string(argv[nextArg]) == "--max-parallel") {
       if (nextArg+1 >= argc) showUsage(argv[0]);
       char *p;
       maxParallel = strtol(argv[nextArg+1], &p, 0);
@@ -369,13 +429,6 @@ int main(int argc, char **argv) {
       period = strtod(argv[nextArg+1], &p);
       if (p == argv[nextArg+1] || *p || period <= 0)
 	showUsage(argv[0], "A positive value is expected after --period.");
-      nextArg++;
-    } else if (string(argv[nextArg]) == "--thrash") {
-      if (nextArg+1 >= argc) showUsage(argv[0]);
-      char *p;
-      minFreeMem = strtod(argv[nextArg+1], &p) * 1024;
-      if (p == argv[nextArg+1] || *p || minFreeMem < 0)
-	showUsage(argv[0], "A non-negative real value is expected after --thrash.");
       nextArg++;
     } else if (string(argv[nextArg]) == "--uid") {
       if (nextArg+1 >= argc) showUsage(argv[0]);

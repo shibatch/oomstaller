@@ -1,6 +1,6 @@
 .\" Manpage for oomstaller
 .\" Contact shibatch@users.sourceforge.net to correct errors.
-.TH oomstaller 1 "01 Dec 2024" "0.3.0" "oomstaller man page"
+.TH oomstaller 1 "01 Jan 2025" "0.4.0" "oomstaller man page"
 .SH NAME
 oomstaller \- suppress swap thrashing at build time
 .SH SYNOPSIS
@@ -18,9 +18,6 @@ $ oomstaller make -j `nproc`
 .UNINDENT
 .SH OPTIONS
 .TP
-.BR \-\-thres " " <percentage, " " default=75>
-This tool suspends processes so that memory usage by running build processes does not exceed the specified percentage of available memory.
-.TP
 .BR \-\-max\-parallel " " <number " " of " " processes, " " default=0>
 Suspends processes so that the number of running build processes does not exceed the specified number. 0 means no limit. A process is counted as one process even if it has multiple threads.
 .TP
@@ -29,9 +26,6 @@ Specifies the maximum number of processes to run when thrashing is detected. 0 m
 .TP
 .BR \-\-period " " <seconds, " " default=1>
 Specifies the interval at which memory usage of each process is checked and processes are controlled.
-.TP
-.BR \-\-thrash " " <minimum " "available " "memory " "(MB), " " default=256>
-If the amount of available memory falls below the specified value, it is assumed that swap thrashing is occurring.
 .TP
 .BR \-\-show\-stat
 Displays statistics when finished.
