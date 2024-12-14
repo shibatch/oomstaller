@@ -224,7 +224,7 @@ void loop(shared_ptr<thread> childTh) {
       for(auto e : m) {
 	if ((e.second.state != 'R' && e.second.state != 'T' && e.second.state != 'D') ||
 	    !isTarget(m, &e.second)) continue;
-	if (e.second.rss > memMax2) memMax2 = e.second.rss + e.second.vmswap;
+	if (e.second.rss + e.second.vmswap > memMax2) memMax2 = e.second.rss + e.second.vmswap;
 	usedMem += e.second.rss;
 	if (e.second.vmswap > 0) swapUsed = true;
 	proc.insert(e.second);
@@ -398,7 +398,7 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     See https://github.com/shibatch/oomstaller" << endl;
   cerr << endl;
-  cerr << "oomstaller 0.4.0 rc1" << endl;
+  cerr << "oomstaller 0.4.0 rc2" << endl;
   cerr << endl;
 
   exit(-1);
