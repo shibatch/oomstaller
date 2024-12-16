@@ -224,7 +224,7 @@ void loop(shared_ptr<thread> childTh) {
       for(auto e : m) {
 	if ((e.second.state != 'R' && e.second.state != 'T' && e.second.state != 'D') ||
 	    !isTarget(m, &e.second)) continue;
-	if (e.second.rss + e.second.vmswap > memMax2) memMax2 = e.second.rss + e.second.vmswap;
+	if (e.second.rss + e.second.vmswap > (unsigned long)memMax2) memMax2 = e.second.rss + e.second.vmswap;
 	usedMem += e.second.rss;
 	if (e.second.vmswap > 0) swapUsed = true;
 	proc.insert(e.second);
@@ -256,10 +256,8 @@ void loop(shared_ptr<thread> childTh) {
     for(auto a : lastActivePids) if (activePids.count(a) == 0) memMax *= MEMMAXDECAY;
     lastActivePids = activePids;
 
-    // memMax2 is the maximum occupied memory by the currently running
-    // processes
-    // memMax is the estimated amount of memory that each process
-    // could potentially occupy
+    // memMax2 is the maximum occupied memory by the currently running processes
+    // memMax is the estimated amount of memory that each process could potentially occupy
     if (memMax2 > memMax) memMax = memMax2;
 
     int maxParallelOP = INT_MAX;
