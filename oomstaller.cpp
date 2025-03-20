@@ -152,8 +152,10 @@ unordered_map<int, ProcInfo> getProcesses() {
     if (!fp) continue;
 
     if (fstat(fileno(fp), &statbuf) == 0 && statbuf.st_uid == uid) {
-      ProcInfo pi(fp, entry->d_name);
-      ret[pi.pid] = pi;
+      try {
+	ProcInfo pi(fp, entry->d_name);
+	ret[pi.pid] = pi;
+      } catch(exception &ex) {}
     }
 
     fclose(fp);
@@ -396,7 +398,7 @@ void showUsage(const string& argv0, const string& mes = "") {
   cerr << endl;
   cerr << "     See https://github.com/shibatch/oomstaller" << endl;
   cerr << endl;
-  cerr << "oomstaller 0.4.0 rc2" << endl;
+  cerr << "oomstaller 0.4.0 rc3" << endl;
   cerr << endl;
 
   exit(-1);
